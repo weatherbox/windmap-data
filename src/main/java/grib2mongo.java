@@ -93,7 +93,7 @@ public class getFile {
 			for (int i = 0; i < ny; i++){
 				BasicDBObject doc = new BasicDBObject("t", forecastTime)
 					.append("r", i)
-					.append("d", (Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
+					.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
 				coll.insert(doc);
 			}
 
