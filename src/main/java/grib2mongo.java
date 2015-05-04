@@ -10,7 +10,7 @@ import ucar.unidata.io.RandomAccessFile;
 
 import com.mongodb.*;
 
-public class getFile {
+public class grib2mongo {
 	private static File download(String input_url, String output_file){
 		File file = null;
 		try {
