@@ -1,2 +1,2 @@
-web:    java -cp target/classes:target/dependency/* Main
-worker:    java -cp target/classes:target/dependency/* grib2mongo
+web:    java $JAVA_OPTS -cp target/classes:target/dependency/* Main
+worker: java $JAVA_OPTS -cp target/classes:target/dependency/* grib2mongo
