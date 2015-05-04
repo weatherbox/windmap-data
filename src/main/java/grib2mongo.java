@@ -119,9 +119,13 @@ public class grib2mongo {
 
 			DBCollection coll_u = db.getCollection("surface_wind_u");
 			setDB(file, 2, 2, 103, 10, coll_u);
+			coll_u.ensureIndex("r");
+			coll_u.ensureIndex("t");
 			
 			DBCollection coll_v = db.getCollection("surface_wind_v");
 			setDB(file, 2, 3, 103, 10, coll_v);
+			coll_v.ensureIndex("r");
+			coll_v.ensureIndex("t");
 
 			// close
 			mongoClient.close();
