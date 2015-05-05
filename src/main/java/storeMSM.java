@@ -1,11 +1,11 @@
 import java.io.*;
 import java.util.*;
-import com.mongodb.*;
 
 public class storeMSM {
 	private static String MSM_URI = "http://database.rish.kyoto-u.ac.jp/arch/jmadata/data/gpv/original/";
 
 	public static void main(String[] args) {
+		long start = System.currentTimeMillis();
 		try {
 			Grib2Mongo gm = new Grib2Mongo();
 
@@ -22,11 +22,14 @@ public class storeMSM {
 			gm.store("surface_wind_v", 2, 3, 103, 10);
 			gm.closeMongo();
 
+		} catch (FileNotFoundException e){
+		 	System.out.println("file not found");
 		} catch (IOException e){
 			System.out.println("io exception");
-
 		} catch (Exception e) {
 			System.out.println("There was an error: " + e.getMessage());
 		}
+		long end = System.currentTimeMillis();
+		System.out.println((end - start)  + "ms");
 	}
 }
