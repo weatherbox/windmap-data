@@ -7,18 +7,28 @@ public class storeMSM {
 	public static void main(String[] args) {
 		long start = System.currentTimeMillis();
 		try {
+			// File time (UTC)
+			TimeZone utc = TimeZone.getTimeZone("UTC");
+			Calendar cal = Calendar.getInstance(utc);
+			int year = cal.get(Calendar.YEAR);
+			int mon  = cal.get(Calendar.MONTH) + 1;
+			int day  = cal.get(Calendar.DATE);
+			int hour = ((int) cal.get(Calendar.HOUR_OF_DAY)/3) * 3 - 6;
+
+			String date = String.format("%d/%02d/%02d", year, mon, day);
+			String time = String.format("%d%02d%02d%02d", year, mon, day, hour);
+
 			Grib2Mongo gm = new Grib2Mongo();
 
-			gm.download(
-				MSM_URI + "2015/02/14/Z__C_RJTD_20150214000000_MSM_GPV_Rjp_Lsurf_FH00-15_grib2.bin",
-				"MSM_Surf_00-15.grib"
-			);
+			String file = MSM_URI + date + "/Z__C_RJTD_" + time + "0000_MSM_GPV_Rjp_Lsurf_FH00-15_grib2.bin";
+			System.out.println(file);
+			gm.download(file, "MSM_Surf_00-15.grib");
 
-			gm.connectMongo(System.getenv("MONGOLAB_URI"));
+			gm.connectMongo(System.getenv("MONGO_DEV_U"));
 			gm.store("surface_wind_u", 2, 2, 103, 10);
 			gm.closeMongo();
 			
-			gm.connectMongo(System.getenv("MONGOLAB_URI"));
+			gm.connectMongo(System.getenv("MONGO_DEV_V"));
 			gm.store("surface_wind_v", 2, 3, 103, 10);
 			gm.closeMongo();
 

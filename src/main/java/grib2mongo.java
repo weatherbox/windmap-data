@@ -72,22 +72,26 @@ public class Grib2Mongo {
 		// get GPV data
 		float[] data = gd.getData(record.getGdsOffset(), record.getPdsOffset(), ids.getRefTime());
 
-		// insert header
+		// update header
+		BasicDBObject query = new BasicDBObject("t", -1);
 		BasicDBObject header = new BasicDBObject("t", -1)
 			.append("nx",  nx)
 			.append("ny",  ny)
 			.append("lo1", gds.getLo1())
 			.append("la1", gds.getLa1())
 			.append("dx",  gds.getDx())
-			.append("dy",  gds.getDy());
-		coll.insert(header);
+			.append("dy",  gds.getDy())
+			.append("refTime", ids.getRefTime());
+		coll.update(query, header, true, false);
 
-		// insert data row
+		// update data row
 		for (int i = 0; i < ny; i++){
+			BasicDBObject queryd = new BasicDBObject("t", forecastTime)
+				.append("r", i);
 			BasicDBObject doc = new BasicDBObject("t", forecastTime)
 				.append("r", i)
 				.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
-			coll.insert(doc);
+			coll.update(queryd, doc, true, false);
 		}
 
 		System.out.print(".");
