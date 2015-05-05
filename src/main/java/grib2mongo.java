@@ -24,33 +24,27 @@ import com.mongodb.*;
 
 public class Grib2Mongo {
 	private File grib2file = null;
+	private MongoClient mongoClient = null;
+	private DB db = null;
 
-	public void download(String input_url, String output_file){
-		try {
-			URL url = new URL(input_url);
-			URLConnection conn = url.openConnection();
-			InputStream in = conn.getInputStream();
 
-			grib2file = new File(output_file);
-			FileOutputStream out = new FileOutputStream(grib2file, false);
+	public void download(String input_url, String output_file) throws MalformedURLException, FileNotFoundException, IOException {
+		URL url = new URL(input_url);
+		URLConnection conn = url.openConnection();
+		InputStream in = conn.getInputStream();
 
-			byte[] bytes = new byte[512];
-			while(true){
-				int ret = in.read(bytes);
-				if(ret <= 0) break;
-				out.write(bytes, 0, ret);
-			}
+		grib2file = new File(output_file);
+		FileOutputStream out = new FileOutputStream(grib2file, false);
 
-			out.close();
-			in.close();
-
-		} catch (MalformedURLException e){
-		   System.out.println("malformed");
-		} catch (FileNotFoundException e){
-		 	System.out.println("file not found");
-		} catch (IOException e){
-			System.out.println("io exception");
+		byte[] bytes = new byte[512];
+		while(true){
+			int ret = in.read(bytes);
+			if(ret <= 0) break;
+			out.write(bytes, 0, ret);
 		}
+
+		out.close();
+		in.close();
 	}
 
 
@@ -78,37 +72,30 @@ public class Grib2Mongo {
 		// get GPV data
 		float[] data = gd.getData(record.getGdsOffset(), record.getPdsOffset(), ids.getRefTime());
 
-		try { 
-			// insert header
-			BasicDBObject header = new BasicDBObject("t", -1)
-				.append("nx",  nx)
-				.append("ny",  ny)
-				.append("lo1", gds.getLo1())
-				.append("la1", gds.getLa1())
-				.append("dx",  gds.getDx())
-				.append("dy",  gds.getDy());
-			coll.insert(header);
+		// insert header
+		BasicDBObject header = new BasicDBObject("t", -1)
+			.append("nx",  nx)
+			.append("ny",  ny)
+			.append("lo1", gds.getLo1())
+			.append("la1", gds.getLa1())
+			.append("dx",  gds.getDx())
+			.append("dy",  gds.getDy());
+		coll.insert(header);
 
-			// insert data row
-			for (int i = 0; i < ny; i++){
-				BasicDBObject doc = new BasicDBObject("t", forecastTime)
-					.append("r", i)
-					.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
-				coll.insert(doc);
-			}
-
-		} catch (Exception e) {
-			System.out.println("There was an error: " + e.getMessage());
+		// insert data row
+		for (int i = 0; i < ny; i++){
+			BasicDBObject doc = new BasicDBObject("t", forecastTime)
+				.append("r", i)
+				.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
+			coll.insert(doc);
 		}
+
 		System.out.print(".");
 	}
 
 
 	
-	public void store (
-			DB db, String collName,
-			int paramCategory, int paramNumber, int surfaceType, double surfaceValue
-		) throws IOException {
+	public void store (String collName, int paramCategory, int paramNumber, int surfaceType, double surfaceValue) throws IOException {
 			
 		// collection
 		DBCollection coll = db.getCollection(collName);
@@ -137,5 +124,14 @@ public class Grib2Mongo {
 	}
 
 
+	public void connectMongo(String mongoURI) throws Exception {
+		MongoClientURI mongoClientURI = new MongoClientURI(mongoURI);
+		mongoClient = new MongoClient(mongoClientURI);
+		db = mongoClient.getDB(mongoClientURI.getDatabase());
+	}
 
+
+	public void closeMongo() {
+		mongoClient.close();
+	}
 }
