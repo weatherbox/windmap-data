@@ -10,55 +10,45 @@ import ucar.unidata.io.RandomAccessFile;
 
 import com.mongodb.*;
 
-public class grib2mongo {
-	private static File download(String input_url, String output_file){
-		File file = null;
-		try {
-			URL url = new URL(input_url);
-			URLConnection conn = url.openConnection();
-			InputStream in = conn.getInputStream();
 
-			file = new File(output_file);
-			FileOutputStream out = new FileOutputStream(file, false);
+/**
+ * 2015-05-05
+ *
+ * Store GRIB2 data in MongoDB.
+ * GRIB2 decoding is performed by the netCDF-Java GRIB decoder.
+ *
+ * Refered to Grib2Json (https://github.com/cambecc/grib2json)
+ *
+ * @author Yuta Tachibana
+ */
 
-			byte[] bytes = new byte[512];
-			while(true){
-				int ret = in.read(bytes);
-				if(ret <= 0) break;
-				out.write(bytes, 0, ret);
-			}
+public class Grib2Mongo {
+	private File grib2file = null;
+	private MongoClient mongoClient = null;
+	private DB db = null;
 
-			out.close();
-			in.close();
 
-		} catch (MalformedURLException e){
-		   System.out.println("malformed");
-		} catch (FileNotFoundException e){
-		 	System.out.println("file not found");
-		} catch (IOException e){
-			System.out.println("io exception");
+	public void download(String input_url, String output_file) throws MalformedURLException, FileNotFoundException, IOException {
+		URL url = new URL(input_url);
+		URLConnection conn = url.openConnection();
+		InputStream in = conn.getInputStream();
+
+		grib2file = new File(output_file);
+		FileOutputStream out = new FileOutputStream(grib2file, false);
+
+		byte[] bytes = new byte[512];
+		while(true){
+			int ret = in.read(bytes);
+			if(ret <= 0) break;
+			out.write(bytes, 0, ret);
 		}
-		return file;
+
+		out.close();
+		in.close();
 	}
 
 
-	private static void setDB(File file, int paramCategory, int paramNumber, int surfaceType, double surfaceValue, DBCollection coll) throws IOException {
-		RandomAccessFile raf = new RandomAccessFile(file.getPath(), "r");
-		raf.order(RandomAccessFile.BIG_ENDIAN);
-		Grib2Input input = new Grib2Input(raf);
-		if (input.scan(false, false)){
-			List<Grib2Record> records = input.getRecords();
-			for (Grib2Record record : records){
-				if (isSelected(record, paramCategory, paramNumber, surfaceType, surfaceValue)){
-					writeData(new Grib2Data(raf), record, coll);
-				}
-			}
-		}
-		raf.close();
-	}
-
-
-	private static boolean isSelected(Grib2Record record, int paramCategory, int paramNumber, int surfaceType, double surfaceValue) {
+	private boolean isSelected(Grib2Record record, int paramCategory, int paramNumber, int surfaceType, double surfaceValue) {
 		Grib2Pds pds = record.getPDS().getPdsVars();
 		return
 			(paramCategory == pds.getParameterCategory()) &&
@@ -68,73 +58,84 @@ public class grib2mongo {
 	}
 
 
-	private static void writeData(Grib2Data gd, Grib2Record record, DBCollection coll) throws MongoException, IOException{
-		// get data
+	// write GPV(header, data) to MongoDB Collection
+	// split data into ny rows
+	private void writeDataToColl(Grib2Data gd, Grib2Record record, DBCollection coll) throws MongoException, IOException{
+		// get header data
+		Grib2Pds                   pds = record.getPDS().getPdsVars();
+        Grib2GDSVariables          gds = record.getGDS().getGdsVars();
 		Grib2IdentificationSection ids = record.getId();
-		Grib2Pds pds = record.getPDS().getPdsVars();
-        Grib2GDSVariables gds = record.getGDS().getGdsVars();
 		int nx = gds.getNx();
 		int ny = gds.getNy();
 		int forecastTime = pds.getForecastTime();
+
+		// get GPV data
 		float[] data = gd.getData(record.getGdsOffset(), record.getPdsOffset(), ids.getRefTime());
 
-		try { 
-			// insert header
-			BasicDBObject header = new BasicDBObject("t", -1)
-				.append("nx", nx)
-				.append("ny", ny)
-				.append("lo1", gds.getLo1())
-				.append("la1", gds.getLa1())
-				.append("dx", gds.getDx())
-				.append("dy", gds.getDy());
-			coll.insert(header);
+		// update header
+		BasicDBObject query = new BasicDBObject("t", -1);
+		BasicDBObject header = new BasicDBObject("t", -1)
+			.append("nx",  nx)
+			.append("ny",  ny)
+			.append("lo1", gds.getLo1())
+			.append("la1", gds.getLa1())
+			.append("dx",  gds.getDx())
+			.append("dy",  gds.getDy())
+			.append("refTime", ids.getRefTime());
+		coll.update(query, header, true, false);
 
-			// insert data row
-			for (int i = 0; i < ny; i++){
-				BasicDBObject doc = new BasicDBObject("t", forecastTime)
-					.append("r", i)
-					.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
-				coll.insert(doc);
-			}
-
-		} catch (Exception e) {
-			System.out.println("There was an error: " + e.getMessage());
+		// update data row
+		for (int i = 0; i < ny; i++){
+			BasicDBObject queryd = new BasicDBObject("t", forecastTime)
+				.append("r", i);
+			BasicDBObject doc = new BasicDBObject("t", forecastTime)
+				.append("r", i)
+				.append("d", Arrays.copyOfRange(data, i*nx, (i+1)*nx-1));
+			coll.update(queryd, doc, true, false);
 		}
+
 		System.out.print(".");
 	}
 
 
-
-
-	public static void main(String[] args) {
-		try {
-			File file = download(
-				"http://database.rish.kyoto-u.ac.jp/arch/jmadata/data/gpv/original/2015/02/14/Z__C_RJTD_20150214000000_MSM_GPV_Rjp_Lsurf_FH00-15_grib2.bin",
-				"grib.grib"
-			);
-
-			// connect to mongodb
-			MongoClient mongoClient = new MongoClient(new MongoClientURI(System.getenv("MONGOLAB_URI")));
-			DB db = mongoClient.getDB("heroku_app33876585");
-
-			DBCollection coll_u = db.getCollection("surface_wind_u");
-			setDB(file, 2, 2, 103, 10, coll_u);
-			coll_u.ensureIndex("r");
-			coll_u.ensureIndex("t");
+	
+	public void store (String collName, int paramCategory, int paramNumber, int surfaceType, double surfaceValue) throws IOException {
 			
-			DBCollection coll_v = db.getCollection("surface_wind_v");
-			setDB(file, 2, 3, 103, 10, coll_v);
-			coll_v.ensureIndex("r");
-			coll_v.ensureIndex("t");
+		// collection
+		DBCollection coll = db.getCollection(collName);
 
-			// close
-			mongoClient.close();
+		// load file
+		RandomAccessFile raf = new RandomAccessFile(grib2file.getPath(), "r");
+		raf.order(RandomAccessFile.BIG_ENDIAN);
+		Grib2Input input = new Grib2Input(raf);
 
-		} catch (IOException e){
-			System.out.println("io exception");
+		// scan all records
+		if (input.scan(false, false)){
+			List<Grib2Record> records = input.getRecords();
+			for (Grib2Record record : records){
 
-		} catch (Exception e) {
-			System.out.println("There was an error: " + e.getMessage());
+				// check params -> storeData
+				if (isSelected(record, paramCategory, paramNumber, surfaceType, surfaceValue)){
+					writeDataToColl(new Grib2Data(raf), record, coll);
+				}
+			}
 		}
+		raf.close();
+
+		// ensure Index
+		coll.ensureIndex("r");
+		coll.ensureIndex("t");
+	}
+
+
+	public void connectMongo(String mongoURI) throws Exception {
+		MongoClientURI mongoClientURI = new MongoClientURI(mongoURI);
+		mongoClient = new MongoClient(mongoClientURI);
+		db = mongoClient.getDB(mongoClientURI.getDatabase());
+	}
+
+
+	public void closeMongo() {
+		mongoClient.close();
 	}
 }
