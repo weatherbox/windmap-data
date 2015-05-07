@@ -63,7 +63,7 @@ public class Grib2Mongo {
 	private void writeDataToColl(Grib2Data gd, Grib2Record record, DBCollection coll) throws MongoException, IOException{
 		// get header data
 		Grib2Pds                   pds = record.getPDS().getPdsVars();
-        Grib2GDSVariables          gds = record.getGDS().getGdsVars();
+        	Grib2GDSVariables          gds = record.getGDS().getGdsVars();
 		Grib2IdentificationSection ids = record.getId();
 		int nx = gds.getNx();
 		int ny = gds.getNy();
